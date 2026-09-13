@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão de Transações — Investimentos</title>
+<style>
+  :root { --verde:#16a34a; --vermelho:#dc2626; --cinza:#6b7280; --borda:#e5e7eb; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,sans-serif; }
+  body { background:#f8fafc; padding:20px; max-width:1000px; margin:0 auto; }
+  h1 { font-size:1.3rem; margin-bottom:4px; }
+  .sub { color:var(--cinza); font-size:.85rem; margin-bottom:16px; }
+  label { display:block; font-size:.8rem; font-weight:600; margin:10px 0 4px; }
+  input, select { width:100%; padding:8px; border:1px solid var(--borda); border-radius:8px; font-size:.9rem; }
+  .tabela { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--borda); border-radius:12px; overflow:hidden; }
+  .tabela th { background:#f1f5f9; font-size:.72rem; text-transform:uppercase; color:var(--cinza); text-align:left; padding:8px 10px; }
+  .tabela td { padding:8px 10px; font-size:.82rem; border-top:1px solid var(--borda); }
+  .tabela td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .acoes { white-space:nowrap; }
+  .btn { padding:4px 10px; border:0; border-radius:6px; font-size:.75rem; font-weight:600; cursor:pointer; margin-right:4px; }
+  .b-edit { background:#e0e7ff; color:#3730a3; }
+  .b-del { background:#fee2e2; color:#991b1b; }
+  .b-salvar { background:var(--verde); color:#fff; }
+  .b-cancelar { background:#f1f5f9; color:var(--cinza); }
+  #msg { margin:12px 0; padding:10px; border-radius:8px; display:none; font-size:.88rem; }
+  .ok { background:#dcfce7; color:#166534; display:block !important; }
+  .erro { background:#fee2e2; color:#991b1b; display:block !important; }
+  .token-box { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:14px; margin-bottom:14px; }
+  nav { margin-top:20px; display:flex; gap:10px; justify-content:center; }
+  nav a, nav span { padding:8px 16px; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600; }
+  nav a { background:#e0e7ff; color:#3730a3; }
+  nav span { background:#f1f5f9; color:var(--cinza); }
+  .edit-row td { background:#f8fafc; }
+</style>
+</head>
+<body>
+<h1>🗂️ Gestão de Transações</h1>
+<p class="sub">Veja, corrija ou apague lançamentos. O snapshot mensal continua sendo a fonte principal — isto aqui é para consertar erros pontuais.</p>
+
+<div class="token-box">
+  <label>Token de acesso</label>
+  <input type="password" id="token" placeholder="Seu token secreto" onchange="carregar()">
+</div>
+
+<div id="msg"></div>
+
+<table class="tabela" id="tabela">
+  <thead><tr>
+    <th>#</th><th>Data</th><th>Conta</th><th>Produto</th><th>Tipo</th><th>Direção</th>
+    <th class="num">Qtd</th><th class="num">Preço</th><th class="num">Valor</th><th>Moeda</th><th>Ações</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<nav>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="index.html">💰 Transações</a>
+  <a href="importar.html">📤 Importar snapshot</a>
+</nav>
+
+<script>
+const SUPABASE_URL = "https://qjubukhoryckpboqcqki.supabase.co"; // TROCAR
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqdWJ1a2hvcnlja3Bib3FjcWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTgxMTEsImV4cCI6MjEwNDc5NDExMX0.quVRHa8Bl2xanQ7LEJ6r_DxSHQWI2L8ReWyHl33YzoU"; // TROCAR
+
+const fmt = v => Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function headers(token) {
+  const h = { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY };
+  if (token) h["x-app-token"] = token;
+  return h;
+}
+
+function msg(texto, classe) {
+  const m = document.getElementById('msg');
+  m.textContent = texto; m.className = classe;
+  setTimeout(() => { m.className = ''; }, 5000);
+}
+
+async function carregar() {
+  const token = document.getElementById('token').value.trim();
+  if (!token) return;
+  const r = await fetch(SUPABASE_URL + "/rest/v1/transacoes?select=*&order=transacao_id.desc&limit=100", { headers: headers(token) });
+  if (!r.ok) { msg("Erro ao carregar (token errado? SQL 05 rodou?)", 'erro'); return; }
+  const dados = await r.json();
+  const tb = document.querySelector("#tabela tbody");
+  tb.innerHTML = dados.map(t => linha(t)).join('');
+}
+
+function linha(t) {
+  const valor = (t.tipo === 'COMPRA' || t.tipo === 'VENDA')
+    ? (t.quantidade||0) * (t.preco_unitario||0)
+    : (t.valor_manual||0);
+  return `<tr id="row-${t.transacao_id}">
+    <td>${t.transacao_id}</td>
+    <td>${t.data}</td>
+    <td>${t.conta_id}</td>
+    <td>${t.produto_id}</td>
+    <td>${t.tipo}</td>
+    <td>${t.direcao || '—'}</td>
+    <td class="num">${t.quantidade != null ? fmt(t.quantidade) : '—'}</td>
+    <td class="num">${t.preco_unitario != null ? fmt(t.preco_unitario) : '—'}</td>
+    <td class="num">${fmt(valor)}</td>
+    <td>${t.moeda}</td>
+    <td class="acoes">
+      <button class="btn b-edit" onclick="editar(${t.transacao_id})">✏️</button>
+      <button class="btn b-del" onclick="deletar(${t.transacao_id})">🗑️</button>
+    </td>
+  </tr>`;
+}
+
+function editar(id) {
+  const tr = document.getElementById('row-' + id);
+  const celulas = tr.querySelectorAll('td');
+  const valores = {
+    data: celulas[1].textContent, conta: celulas[2].textContent, produto: celulas[3].textContent,
+    tipo: celulas[4].textContent, direcao: celulas[5].textContent.trim(),
+    qtd: celulas[6].textContent, preco: celulas[7].textContent
+  };
+  tr.className = 'edit-row';
+  celulas[1].innerHTML = `<input type="date" id="e-data" value="${valores.data}">`;
+  celulas[4].innerHTML = `<select id="e-tipo">${['COMPRA','VENDA','APORTE_RETIRADA','DIVIDENDO','TAXA'].map(x=>`<option ${x===valores.tipo?'selected':''}>${x}</option>`).join('')}</select>`;
+  celulas[6].innerHTML = `<input type="number" step="any" id="e-qtd" value="${valores.qtd != '—' ? valores.qtd.replace('.','').replace(',','.') : ''}">`;
+  celulas[7].innerHTML = `<input type="number" step="any" id="e-preco" value="${valores.preco != '—' ? valores.preco.replace('.','').replace(',','.') : ''}">`;
+  celulas[10].innerHTML = `
+    <button class="btn b-salvar" onclick="salvar(${id})">Salvar</button>
+    <button class="btn b-cancelar" onclick="carregar()">Cancelar</button>`;
+}
+
+async function salvar(id) {
+  const token = document.getElementById('token').value.trim();
+  const patch = {
+    data: document.getElementById('e-data').value,
+    tipo: document.getElementById('e-tipo').value,
+    quantidade: parseFloat(document.getElementById('e-qtd').value) || null,
+    preco_unitario: parseFloat(document.getElementById('e-preco').value) || null
+  };
+  const r = await fetch(SUPABASE_URL + "/rest/v1/transacoes?transacao_id=eq." + id, {
+    method: 'PATCH',
+    headers: { ...headers(token), "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify(patch)
+  });
+  if (r.ok) { msg("✅ Transação #" + id + " atualizada", 'ok'); }
+  else { const e = await r.json().catch(()=>({})); msg("❌ " + (e.message || r.status), 'erro'); }
+  carregar();
+}
+
+async function deletar(id) {
+  if (!confirm("Apagar a transação #" + id + "? Esta ação não tem volta.")) return;
+  const token = document.getElementById('token').value.trim();
+  const r = await fetch(SUPABASE_URL + "/rest/v1/transacoes?transacao_id=eq." + id, {
+    method: 'DELETE',
+    headers: headers(token)
+  });
+  if (r.ok) { msg("🗑️ Transação #" + id + " apagada", 'ok'); }
+  else { const e = await r.json().catch(()=>({})); msg("❌ " + (e.message || r.status), 'erro'); }
+  carregar();
+}
+
+carregar();
+</script>
+</body>
+</html>
