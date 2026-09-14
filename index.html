@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lançamento de Transações — Investimentos</title>
+<style>
+  :root { --verde:#16a34a; --vermelho:#dc2626; --cinza:#6b7280; --borda:#e5e7eb; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,sans-serif; }
+  body { background:#f8fafc; padding:24px; max-width:560px; margin:0 auto; }
+  h1 { font-size:1.3rem; margin-bottom:4px; }
+  .sub { color:var(--cinza); font-size:.85rem; margin-bottom:20px; }
+  label { display:block; font-size:.8rem; font-weight:600; margin:12px 0 4px; }
+  select, input, textarea { width:100%; padding:10px; border:1px solid var(--borda); border-radius:8px; font-size:.95rem; background:#fff; }
+  .linha { display:flex; gap:10px; }
+  .linha > div { flex:1; }
+  button { width:100%; margin-top:18px; padding:12px; background:var(--verde); color:#fff; border:0; border-radius:8px; font-size:1rem; font-weight:600; cursor:pointer; }
+  button:disabled { background:#9ca3af; cursor:not-allowed; }
+  #msg { margin-top:12px; padding:10px; border-radius:8px; display:none; font-size:.9rem; }
+  .ok { background:#dcfce7; color:#166534; display:block !important; }
+  .erro { background:#fee2e2; color:#991b1b; display:block !important; }
+  .nota { font-size:.75rem; color:var(--cinza); margin-top:16px; }
+</style>
+</head>
+<body>
+<h1>💰 Lançamento de Transações</h1>
+<p class="sub">Grava direto no seu Supabase. O caixa (COMPRA/VENDA) é lançado por você na linha seguinte — mesma regra da planilha.</p>
+<label>Token de acesso</label>
+<input type="password" id="token" placeholder="Seu token secreto (x-app-token)">
+<label>Data</label>
+<input type="date" id="data">
+<label>Conta</label>
+<select id="conta"><option value="">Carregando…</option></select>
+<label>Produto</label>
+<select id="produto"><option value="">Carregando…</option></select>
+<label>Tipo</label>
+<select id="tipo" onchange="atualizarCampos()">
+  <option value="COMPRA">COMPRA</option>
+  <option value="VENDA">VENDA</option>
+  <option value="APORTE_RETIRADA">APORTE/RETIRADA</option>
+  <option value="DIVIDENDO">DIVIDENDO</option>
+  <option value="TAXA">TAXA</option>
+</select>
+<label>Direção (só para APORTE/RETIRADA)</label>
+<select id="direcao">
+  <option value="">—</option>
+  <option value="ENTRADA">ENTRADA</option>
+  <option value="SAIDA">SAIDA</option>
+</select>
+<div class="linha">
+  <div>
+    <label>Quantidade (COMPRA/VENDA)</label>
+    <input type="number" step="any" id="qtd" placeholder="ex.: 10">
+  </div>
+  <div>
+    <label>Preço unitário</label>
+    <input type="number" step="any" id="preco" placeholder="ex.: 72.40">
+  </div>
+</div>
+<div class="linha">
+  <div>
+    <label>Taxas (na moeda)</label>
+    <input type="number" step="any" id="taxas" value="0">
+  </div>
+  <div>
+    <label>Valor manual (APORTE/DIV/TAXA)</label>
+    <input type="number" step="any" id="manual" placeholder="ex.: 500">
+  </div>
+</div>
+<label>Moeda</label>
+<select id="moeda" onchange="atualizarCampos()">
+  <option value="BRL">BRL</option>
+  <option value="USD">USD</option>
+</select>
+<label id="lblFx">Câmbio USD/BRL (obrigatório se USD)</label>
+<input type="number" step="any" id="fx" placeholder="ex.: 5.12">
+<label>Caixa destino (se DIVIDENDO)</label>
+<select id="caixaDestino">
+  <option value="">—</option>
+</select>
+<label>Notas (opcional)</label>
+<textarea id="notas" rows="2" placeholder="ex.: Aporte mensal"></textarea>
+<button id="btn" onclick="enviar()">Lançar transação</button>
+<div id="msg"></div>
+<nav style="margin-top:24px; display:flex; gap:10px; justify-content:center;">
+  <a href="dashboard.html" style="padding:8px 16px; background:#e0e7ff; color:#3730a3; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">📊 Dashboard</a>
+  <a href="importar.html" style="padding:8px 16px; background:#dcfce7; color:#166534; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">📤 Importar snapshot</a>
+  <span style="padding:8px 16px; background:#f1f5f9; color:#6b7280; border-radius:8px; font-size:.85rem; font-weight:600;">💰 Transações</span>
+</nav>
+<!-- ============ CONSULTA: ÚLTIMAS TRANSAÇÕES ============ -->
+<div style="margin-top:32px; background:#fff; border:1px solid var(--borda); border-radius:12px; padding:16px;">
+  <h2 style="font-size:1rem; margin-bottom:4px;">🔍 Últimas transações</h2>
+  <p style="font-size:.78rem; color:var(--cinza); margin-bottom:12px;">Confirme o que entrou no banco (inclusive os snapshots importados).</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+    <select id="fConta" style="flex:1; min-width:110px; padding:8px; border:1px solid var(--borda); border-radius:8px; font-size:.85rem;">
+      <option value="">Todas as contas</option>
+    </select>
+    <select id="fTipo" style="flex:1; min-width:110px; padding:8px; border:1px solid var(--borda); border-radius:8px; font-size:.85rem;">
+      <option value="">Todos os tipos</option>
+      <option>COMPRA</option><option>VENDA</option><option>APORTE_RETIRADA</option>
+      <option>DIVIDENDO</option><option>TAXA</option>
+    </select>
+    <select id="fLimite" style="flex:1; min-width:90px; padding:8px; border:1px solid var(--borda); border-radius:8px; font-size:.85rem;">
+      <option value="20">20 linhas</option>
+      <option value="50" selected>50 linhas</option>
+      <option value="100">100 linhas</option>
+      <option value="200">200 linhas</option>
+    </select>
+    <button onclick="consultar()" style="flex:1; min-width:110px; margin-top:0; padding:8px; font-size:.85rem;">Consultar</button>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.78rem;" id="tabelaConsulta">
+      <thead><tr style="background:#f1f5f9;">
+        <th onclick="ordenarPor('transacao_id')" style="padding:6px 8px; text-align:left; color:var(--cinza); cursor:pointer; user-select:none;"># ↕</th>
+        <th onclick="ordenarPor('data')" style="padding:6px 8px; text-align:left; color:var(--cinza); cursor:pointer; user-select:none;">Data ↕</th>
+        <th onclick="ordenarPor('conta_id')" style="padding:6px 8px; text-align:left; color:var(--cinza); cursor:pointer; user-select:none;">Conta ↕</th>
+        <th onclick="ordenarPor('produto_id')" style="padding:6px 8px; text-align:left; color:var(--cinza); cursor:pointer; user-select:none;">Produto ↕</th>
+        <th onclick="ordenarPor('tipo')" style="padding:6px 8px; text-align:left; color:var(--cinza); cursor:pointer; user-select:none;">Tipo ↕</th>
+        <th onclick="ordenarPor('quantidade')" style="padding:6px 8px; text-align:right; color:var(--cinza); cursor:pointer; user-select:none;">Qtd ↕</th>
+        <th onclick="ordenarPor('preco_unitario')" style="padding:6px 8px; text-align:right; color:var(--cinza); cursor:pointer; user-select:none;">Preço ↕</th>
+        <th onclick="ordenarPor('valor')" style="padding:6px 8px; text-align:right; color:var(--cinza); cursor:pointer; user-select:none;">Valor (R$) ↕</th>
+      </tr></thead>
+      <tbody id="tbodyConsulta"></tbody>
+    </table>
+  </div>
+  <p id="resumoConsulta" style="font-size:.75rem; color:var(--cinza); margin-top:8px;"></p>
+</div>
+<p class="nota">Regras do método: COMPRA/VENDA sempre com quantidade + preço. USD exige câmbio do dia. Dividendo entra no caixa destino. Travados (COE/FMP) não rebalanceiam.</p>
+<script>
+const SUPABASE_URL = "https://qjubukhoryckpboqcqki.supabase.co"; // TROCAR
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqdWJ1a2hvcnlja3Bib3FjcWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTgxMTEsImV4cCI6MjEwNDc5NDExMX0.quVRHa8Bl2xanQ7LEJ6r_DxSHQWI2L8ReWyHl33YzoU"; // TROCAR (Settings -> API -> anon/publishable)
+let produtos = [], contas = [];
+async function init() {
+  document.getElementById('data').value = new Date().toISOString().slice(0,10);
+  const headers = { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY };
+  const [rC, rP] = await Promise.all([
+    fetch(SUPABASE_URL + "/rest/v1/contas?select=conta_id,nome_conta&order=conta_id", { headers }),
+    fetch(SUPABASE_URL + "/rest/v1/produtos?select=produto_id,nome,moeda_padrao:taxonomia_id&order=produto_id", { headers })
+  ]);
+  contas = await rC.json();
+  produtos = await rP.json();
+  // moeda_padrao da conta para sugerir moeda
+  const selC = document.getElementById('conta');
+  contas.forEach(c => selC.add(new Option(c.nome_conta, c.conta_id)));
+  const selP = document.getElementById('produto');
+  produtos.forEach(p => selP.add(new Option(p.nome, p.produto_id)));
+  // caixa destino
+  const selD = document.getElementById('caixaDestino');
+  ['CAIXA_BRL','CAIXA_USD'].forEach(id => selD.add(new Option(id, id)));
+  // moeda padrao da conta
+  selC.addEventListener('change', () => {
+    const c = contas.find(x => x.conta_id === selC.value);
+    if (c) document.getElementById('moeda').value = (c.conta_id === 'AVENUE' || c.conta_id === 'POLONIEX') ? 'USD' : 'BRL';
+    atualizarCampos();
+  });
+}
+function atualizarCampos() {
+  const tipo = document.getElementById('tipo').value;
+  const moeda = document.getElementById('moeda').value;
+  const isCV = tipo === 'COMPRA' || tipo === 'VENDA';
+  document.getElementById('qtd').disabled = !isCV;
+  document.getElementById('preco').disabled = !isCV;
+  document.getElementById('manual').disabled = isCV;
+  document.getElementById('fx').disabled = moeda === 'BRL';
+  document.getElementById('lblFx').style.opacity = moeda === 'BRL' ? .4 : 1;
+}
+async function enviar() {
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+  btn.disabled = true; btn.textContent = "Enviando…";
+  msg.className = ''; msg.style.display = 'none';
+  const token = document.getElementById('token').value.trim();
+  const tipo = document.getElementById('tipo').value;
+  const moeda = document.getElementById('moeda').value;
+  const fx = moeda === 'USD' ? parseFloat(document.getElementById('fx').value) : null;
+  const isCV = tipo === 'COMPRA' || tipo === 'VENDA';
+  // Próximo transacao_id
+  const h0 = { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY };
+  const rLast = await fetch(SUPABASE_URL + "/rest/v1/transacoes?select=transacao_id&order=transacao_id.desc&limit=1", { headers: h0 });
+  const last = await rLast.json();
+  const novoId = (last.length ? parseInt(last[0].transacao_id) : 0) + 1;
+  const body = [{
+    transacao_id: novoId,
+    data: document.getElementById('data').value,
+    conta_id: document.getElementById('conta').value,
+    produto_id: document.getElementById('produto').value,
+    tipo: tipo,
+    direcao: tipo === 'APORTE_RETIRADA' ? document.getElementById('direcao').value : null,
+    quantidade: isCV ? parseFloat(document.getElementById('qtd').value) : null,
+    preco_unitario: isCV ? parseFloat(document.getElementById('preco').value) : null,
+    taxas_moeda: parseFloat(document.getElementById('taxas').value) || 0,
+    moeda: moeda,
+    fx_usdbrl: fx,
+    valor_manual: isCV ? null : parseFloat(document.getElementById('manual').value),
+    caixa_destino_produto_id: tipo === 'DIVIDENDO' ? document.getElementById('caixaDestino').value : null,
+    notas: document.getElementById('notas').value || null
+  }];
+  // Validações do método
+  const erros = [];
+  if (!body[0].data) erros.push("Informe a data");
+  if (!body[0].conta_id) erros.push("Escolha a conta");
+  if (!body[0].produto_id) erros.push("Escolha o produto");
+  if (isCV && (!body[0].quantidade || !body[0].preco_unitario)) erros.push("COMPRA/VENDA exige quantidade e preço");
+  if (moeda === 'USD' && !fx) erros.push("USD exige o câmbio do dia");
+  if (tipo === 'APORTE_RETIRADA' && !body[0].direcao) erros.push("APORTE/RETIRADA exige direção");
+  if (tipo === 'DIVIDENDO' && !body[0].caixa_destino_produto_id) erros.push("DIVIDENDO exige caixa destino");
+  if (!token) erros.push("Informe o token");
+  if (erros.length) {
+    msg.textContent = "⚠️ " + erros.join(" · ");
+    msg.className = 'erro';
+    btn.disabled = false; btn.textContent = "Lançar transação";
+    return;
+  }
+  const r = await fetch(SUPABASE_URL + "/rest/v1/transacoes", {
+    method: "POST",
+    headers: {
+      apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY,
+      "Content-Type": "application/json", "x-app-token": token,
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(body)
+  });
+  if (r.ok) {
+    msg.textContent = "✅ Transação #" + novoId + " lançada! O rebalanceamento já recalculou.";
+    msg.className = 'ok';
+    document.getElementById('notas').value = '';
+  } else {
+    const e = await r.json().catch(() => ({}));
+    msg.textContent = "❌ Erro " + r.status + ": " + (e.message || JSON.stringify(e));
+    msg.className = 'erro';
+  }
+  btn.disabled = false; btn.textContent = "Lançar transação";
+}
+init();
+atualizarCampos();
+// ============ CONSULTA: ÚLTIMAS TRANSAÇÕES ============
+const fmtBRL = v => Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+let dadosConsulta = [];
+let ordemAtual = { campo: null, asc: false };
+function valorCalculado(t) {
+  return (t.tipo === 'COMPRA' || t.tipo === 'VENDA')
+    ? (t.quantidade||0) * (t.preco_unitario||0) * (t.fx_usdbrl||1)
+    : (t.valor_manual||0) * (t.fx_usdbrl||1);
+}
+function ordenarPor(campo) {
+  // alterna direção se clicar na mesma coluna
+  if (ordemAtual.campo === campo) ordemAtual.asc = !ordemAtual.asc;
+  else ordemAtual = { campo, asc: false }; // 1o clique: desc (mais relevante)
+  renderTabela();
+}
+function renderTabela() {
+  const dados = [...dadosConsulta];
+  if (ordemAtual.campo) {
+    dados.sort((a,b) => {
+      let va, vb;
+      if (ordemAtual.campo === 'valor') { va = valorCalculado(a); vb = valorCalculado(b); }
+      else { va = a[ordemAtual.campo]; vb = b[ordemAtual.campo]; }
+      if (va == null) va = ''; if (vb == null) vb = '';
+      if (typeof va === 'number' && typeof vb === 'number') return ordemAtual.asc ? va - vb : vb - va;
+      const r = String(va).localeCompare(String(vb), 'pt-BR');
+      return ordemAtual.asc ? r : -r;
+    });
+  }
+  document.getElementById('tbodyConsulta').innerHTML = dados.map(t => {
+    const valor = valorCalculado(t);
+    return `<tr>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda);">${t.transacao_id}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda);">${t.data}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda);">${t.conta_id}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda);">${t.produto_id}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda);">${t.tipo}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda); text-align:right; white-space:nowrap;">${t.quantidade != null ? Number(t.quantidade).toLocaleString('pt-BR') : '—'}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda); text-align:right; white-space:nowrap;">${t.preco_unitario != null ? Number(t.preco_unitario).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'}</td>
+      <td style="padding:5px 8px; border-top:1px solid var(--borda); text-align:right; white-space:nowrap;">${fmtBRL(valor)}</td>
+    </tr>`;
+  }).join('');
+  const total = dados.reduce((s,t) => s + valorCalculado(t), 0);
+  document.getElementById('resumoConsulta').textContent =
+    dados.length + " transações · soma dos valores: R$ " + fmtBRL(total) + " · clique nos títulos para ordenar";
+}
+async function consultar() {
+  const token = document.getElementById('token').value.trim();
+  if (!token) { alert("Informe o token para consultar."); return; }
+  const conta = document.getElementById('fConta').value;
+  const tipo = document.getElementById('fTipo').value;
+  const limite = document.getElementById('fLimite').value;
+  let url = SUPABASE_URL + "/rest/v1/transacoes?select=*&order=data.desc,transacao_id.desc&limit=" + limite;
+  if (conta) url += "&conta_id=eq." + encodeURIComponent(conta);
+  if (tipo) url += "&tipo=eq." + encodeURIComponent(tipo);
+  const r = await fetch(url, { headers: { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY, "x-app-token": token } });
+  if (!r.ok) { alert("Erro na consulta: " + r.status + " (token válido? SQL 05 rodou?)"); return; }
+  dadosConsulta = await r.json();
+  ordemAtual = { campo: null, asc: false };
+  renderTabela();
+}
+// popula o filtro de contas
+(async () => {
+  const sel = document.getElementById('fConta');
+  try {
+    const r = await fetch(SUPABASE_URL + "/rest/v1/contas?select=conta_id&order=conta_id", { headers: { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY } });
+    const cs = await r.json();
+    cs.forEach(c => sel.add(new Option(c.conta_id, c.conta_id)));
+  } catch {}
+})();
+</script>
+</body>
+</html>

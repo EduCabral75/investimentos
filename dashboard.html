@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Investimentos — Eduardo</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --verde:#16a34a; --vermelho:#dc2626; --amarelo:#d97706; --azul:#2563eb; --cinza:#6b7280; --borda:#e5e7eb; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,sans-serif; }
+  body { background:#f8fafc; padding:20px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:1.4rem; }
+  .sub { color:var(--cinza); font-size:.85rem; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:16px; }
+  .card h3 { font-size:.75rem; text-transform:uppercase; color:var(--cinza); margin-bottom:6px; letter-spacing:.04em; }
+  .valor { font-size:1.5rem; font-weight:700; }
+  .detalhe { font-size:.8rem; color:var(--cinza); margin-top:4px; }
+  .kpi-ok { color:var(--verde); } .kpi-alerta { color:var(--amarelo); } .kpi-ruim { color:var(--vermelho); }
+  .tabela { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--borda); border-radius:12px; overflow:hidden; margin-bottom:16px; }
+  .tabela th { background:#f1f5f9; font-size:.75rem; text-transform:uppercase; color:var(--cinza); text-align:left; padding:10px 12px; }
+  .tabela td { padding:10px 12px; font-size:.88rem; border-top:1px solid var(--borda); }
+  .tabela td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .badge { padding:3px 10px; border-radius:99px; font-size:.72rem; font-weight:700; }
+  .b-aportar { background:#dcfce7; color:#166534; }
+  .b-acima { background:#fef3c7; color:#92400e; }
+  .b-ok { background:#e0e7ff; color:#3730a3; }
+  .b-fora { background:#fee2e2; color:#991b1b; }
+  .graficos { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+  @media (max-width:800px){ .graficos{ grid-template-columns:1fr; } }
+  .box-grafico { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:16px; }
+  .box-grafico h3 { font-size:.85rem; margin-bottom:10px; }
+  .plano { background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px; margin-bottom:16px; }
+  .plano h3 { color:#1e40af; font-size:.9rem; margin-bottom:8px; }
+  .plano li { margin:6px 0 6px 18px; font-size:.88rem; }
+  .plano .regra { font-size:.78rem; color:#1e40af; margin-top:10px; padding-top:8px; border-top:1px solid #bfdbfe; }
+  .serpros { font-size:.8rem; color:var(--cinza); text-align:center; padding:10px; }
+  #status { font-size:.8rem; color:var(--cinza); }
+</style>
+</head>
+<body>
+<h1>📊 Dashboard de Investimentos</h1>
+<p class="sub">Método 45/45/10 · bandas ±5 p.p. (cripto/sandbox ±2) · prioridade: aportes → caixa → só depois vender · travados não rebalanceiam · SERPROS fora</p>
+<p id="status">Carregando dados do Supabase…</p>
+<div class="grid" id="kpis"></div>
+<div class="plano" id="plano"></div>
+<div class="graficos">
+  <div class="box-grafico"><h3>Alocação por classe (atual vs alvo)</h3><canvas id="gClasse"></canvas></div>
+  <div class="box-grafico"><h3>Distribuição por subclasse</h3><canvas id="gSub"></canvas></div>
+</div>
+<div class="box-grafico" style="margin-bottom:16px;"><h3>Evolução do patrimônio (snapshot a snapshot)</h3><canvas id="gEvolucao"></canvas></div>
+<table class="tabela" id="tabelaReb">
+  <thead><tr><th>Subclasse</th><th>Classe</th><th class="num">Valor atual</th><th class="num">% atual</th><th class="num">% alvo</th><th class="num">Distância</th><th>Status</th><th>Banda</th></tr></thead>
+  <tbody></tbody>
+</table>
+<div class="serpros" id="serpros"></div>
+<nav style="margin-top:16px; display:flex; gap:10px; justify-content:center;">
+  <span style="padding:8px 16px; background:#f1f5f9; color:#6b7280; border-radius:8px; font-size:.85rem; font-weight:600;">📊 Dashboard</span>
+  <a href="index.html" style="padding:8px 16px; background:#e0e7ff; color:#3730a3; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">💰 Transações</a>
+  <a href="importar.html" style="padding:8px 16px; background:#dcfce7; color:#166534; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">📤 Importar snapshot</a>
+</nav>
+<script>
+const SUPABASE_URL = "https://qjubukhoryckpboqcqki.supabase.co"; // TROCAR
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqdWJ1a2hvcnlja3Bib3FjcWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTgxMTEsImV4cCI6MjEwNDc5NDExMX0.quVRHa8Bl2xanQ7LEJ6r_DxSHQWI2L8ReWyHl33YzoU"; // TROCAR
+const APORTE_MENSAL = 500;
+const fmt = v => "R$ " + Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = v => (Number(v||0)*100).toFixed(2).replace(".",",") + "%";
+const H = { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY };
+async function pegar(view) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*`, { headers: H });
+  if (!r.ok) throw new Error(view + ": " + r.status);
+  return r.json();
+}
+function badge(status, foraDaBanda, direcao) {
+  if (direcao === "abaixo") return `<span class="badge b-aportar">ABAIXO · aportar aqui</span>`;
+  if (direcao === "acima") return `<span class="badge b-acima">ACIMA · não aportar</span>`;
+  if (status === "APORTAR") return `<span class="badge b-aportar">ABAIXO · aportar aqui</span>`;
+  if (status === "ACIMA DO ALVO") return `<span class="badge b-acima">ACIMA · não aportar</span>`;
+  return `<span class="badge b-ok">NO ALVO</span>`;
+}
+// ============ MÓDULO À PROVA DE MEDO ============
+function planoDeAcao(reb, serpros) {
+  const total = reb.reduce((s,r) => s + Number(r.valor_atual_brl||0), 0);
+  const abaixo = reb.filter(r => Number(r.distancia_brl) > 100).sort((a,b) => b.distancia_brl - a.distancia_brl);
+  const acima = reb.filter(r => Number(r.distancia_brl) < -100);
+  const foraBanda = reb.filter(r => Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0));
+  const agora = new Date();
+  const mesDeAcao = [0,3,6,9].includes(agora.getMonth()); // jan/abr/jul/out = rebalanceamento trimestral
+  const dia = agora.getDate();
+  let html = `<h3>🧭 Plano de ação de hoje (${agora.toLocaleDateString("pt-BR")})</h3><ul>`;
+  // 1. Decisão única e objetiva
+  if (abaixo.length) {
+    const p = abaixo[0];
+    html += `<li><b>APORTE DO MÊS (R$ ${APORTE_MENSAL}):</b> invista em <b>${p.subclasse}</b> — é a maior lacuna (falta ${fmt(p.distancia_brl)} para o alvo de ${pct(p.pct_alvo)}).</li>`;
+  } else {
+    html += `<li><b>APORTE DO MÊS:</b> todas as classes no alvo — deixe o aporte no <b>Caixa/DI</b> aguardando oportunidade.</li>`;
+  }
+  // 2. Rebalanceamento trimestral, só quando toca
+  if (mesDeAcao && dia <= 7) {
+    if (foraBanda.length) {
+      html += `<li><b>MÊS DE REBALANCEAMENTO:</b> ${foraBanda.map(r=>r.subclasse).join(", ")} estão fora da banda. Prioridade: use caixa excedente e aportes futuros; venda de ganhadores só se o caixa não resolver.</li>`;
+    } else {
+      html += `<li><b>MÊS DE REBALANCEAMENTO:</b> tudo dentro das bandas — <b>não faça nada</b>. Método > impulso.</b></li>`;
+    }
+  } else {
+    const prox = [0,3,6,9].find(m => m > agora.getMonth());
+    const nomeMes = ["janeiro","abril","julho","outubro"][prox !== undefined ? [0,3,6,9].indexOf(prox) : 0];
+    html += `<li><b>Rebalanceamento:</b> não é mês de ação (próximo: ${nomeMes}). Se o medo bater, a resposta é <b>não fazer nada</b> — o plano já está no automático.</li>`;
+  }
+  // 3. Alertas objetivos
+  if (acima.length) html += `<li><b>Não coloque mais dinheiro em:</b> ${acima.map(r=>r.subclasse).join(", ")} (acima do alvo).</li>`;
+  html += `<li><b>Travados (COE, FMP Eletrobras):</b> intocáveis até o vencimento — não são usados para rebalancear.</li>`;
+  // 4. Regra de ouro
+  html += `</ul><div class="regra">🛡️ Regra do método: <b>o plano decide, não a emoção.</b> Fora do mês de rebalanceamento, sua única tarefa é o aporte mensal. Vender só por rebalanceamento, nunca por medo.</div>`;
+  return html;
+}
+async function carregar() {
+  try {
+    const [reb, pos, serpros, cambio, evolucao] = await Promise.all([
+      pegar("rebalanceamento_mercado"), pegar("view_snapshot_atual"), pegar("serpros_info"),
+      pegar("cambio"), pegar("evolucao_mensal")
+    ]);
+    document.getElementById("status").textContent = "Atualizado em " + new Date().toLocaleString("pt-BR") + " · fonte: seu Supabase";
+    // ===== KPIs (dados do snapshot a mercado) =====
+    const total = reb.reduce((s,r) => s + Number(r.valor_atual_brl||0), 0);
+    const mercado = pos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
+    const caixaBRL = pos.filter(p => p.produto_id === "CAIXA_BRL").reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
+    const caixaUSD = pos.filter(p => p.produto_id === "CAIXA_USD").reduce((s,p) => s + Number(p.valor_mercado_moeda||0), 0);
+    const serprosSaldo = serpros.length ? Number(serpros[serpros.length-1].saldo_brl) : 0;
+    const foraBanda = reb.filter(r => Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0)).length;
+    const fx = cambio.length ? Number(cambio[0].usdbrl) : 5.0;
+    // ===== EVOLUÇÃO PATRIMONIAL =====
+    const evo = (evolucao || []).sort((a,b) => a.data_ref.localeCompare(b.data_ref));
+    const ultimo = evo.length ? Number(evo[evo.length-1].total_brl) : 0;
+    const anterior = evo.length > 1 ? Number(evo[evo.length-2].total_brl) : null;
+    const varMes = anterior !== null ? ((ultimo - anterior) / anterior * 100) : null;
+    const varMesFmt = varMes === null ? "primeiro snapshot" : ((varMes >= 0 ? "▲ +" : "▼ ") + varMes.toFixed(2).replace(".",",") + "% vs mês anterior");
+    document.getElementById("kpis").innerHTML = `
+      <div class="card"><h3>Patrimônio investível (a mercado)</h3><div class="valor">${fmt(total)}</div><div class="detalhe">snapshot de ${pos.length ? pos[0].data_ref : "—"} · ${pos.length} posições</div></div>
+      <div class="card"><h3>Caixa BRL</h3><div class="valor">${fmt(caixaBRL)}</div><div class="detalhe">reserva de oportunidade</div></div>
+      <div class="card"><h3>Caixa USD</h3><div class="valor">US$ ${Number(caixaUSD).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div><div class="detalhe">câmbio ref.: ${fx}</div></div>
+      <div class="card"><h3>Classes fora da banda</h3><div class="valor ${foraBanda ? "kpi-alerta" : "kpi-ok"}">${foraBanda}</div><div class="detalhe">${foraBanda ? "ver plano de ação" : "tudo dentro do plano"}</div></div>
+      <div class="card"><h3>Evolução do patrimônio</h3><div class="valor ${varMes !== null && varMes < 0 ? "kpi-ruim" : "kpi-ok"}">${fmt(ultimo)}</div><div class="detalhe">${varMesFmt}</div></div>`;
+    // ===== GRÁFICO: EVOLUÇÃO MÊS A MÊS =====
+    if (evo.length >= 1) {
+      new Chart(document.getElementById("gEvolucao"), {
+        type: "line",
+        data: {
+          labels: evo.map(e => e.data_ref.slice(0,7)),
+          datasets: [{ label: "Patrimônio (R$)", data: evo.map(e => Number(e.total_brl)), borderColor: "#16a34a", backgroundColor: "rgba(22,163,74,.1)", fill: true, tension: .3 }]
+        },
+        options: { plugins: { tooltip: { callbacks: { label: c => fmt(c.raw) } } }, scales: { y: { ticks: { callback: v => "R$ " + (v/1000).toFixed(0) + "k" } } } }
+      });
+    }
+    // ===== PLANO DE AÇÃO (à prova de medo) =====
+    document.getElementById("plano").innerHTML = planoDeAcao(reb);
+    // ===== GRÁFICO 1: classes atual vs alvo =====
+    const porClasse = {};
+    reb.forEach(r => {
+      porClasse[r.classe_macro] = porClasse[r.classe_macro] || { atual:0, alvo:0 };
+      porClasse[r.classe_macro].atual += Number(r.pct_atual||0);
+      porClasse[r.classe_macro].alvo += Number(r.pct_alvo||0);
+    });
+    const classes = Object.keys(porClasse);
+    new Chart(document.getElementById("gClasse"), {
+      type: "bar",
+      data: { labels: classes, datasets: [
+        { label: "Atual (%)", data: classes.map(c => (porClasse[c].atual*100).toFixed(2)), backgroundColor: "#2563eb" },
+        { label: "Alvo (%)", data: classes.map(c => (porClasse[c].alvo*100).toFixed(2)), backgroundColor: "#93c5fd" }
+      ]},
+      options: { scales: { y: { ticks: { callback: v => v + "%" } } } }
+    });
+    // ===== GRÁFICO 2: pizza por subclasse =====
+    const subs = reb.filter(r => Number(r.valor_atual_brl) > 0);
+    new Chart(document.getElementById("gSub"), {
+      type: "doughnut",
+      data: { labels: subs.map(r => r.subclasse), datasets: [{ data: subs.map(r => Number(r.valor_atual_brl)) }] },
+      options: { plugins: { tooltip: { callbacks: { label: c => c.label + ": " + fmt(c.raw) } } } }
+    });
+    // ===== TABELA =====
+    const tb = document.querySelector("#tabelaReb tbody");
+    tb.innerHTML = reb
+      .sort((a,b) => a.classe_macro.localeCompare(b.classe_macro) || a.subclasse.localeCompare(b.subclasse))
+      .map(r => {
+        const fora = Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0);
+        return `<tr>
+          <td><b>${r.subclasse}</b></td><td>${r.classe_macro}</td>
+          <td class="num">${fmt(r.valor_atual_brl)}</td>
+          <td class="num">${pct(r.pct_atual)}</td>
+          <td class="num">${pct(r.pct_alvo)}</td>
+          <td class="num" style="color:${Number(r.distancia_brl)>0?"var(--verde)":"var(--vermelho)"}">${Number(r.distancia_brl)>0?"+":""}${fmt(r.distancia_brl)}</td>
+          <td>${badge(r.status, false, Number(r.distancia_brl)>0 ? "abaixo" : (Number(r.distancia_brl)<0 ? "acima" : null))}</td>
+          <td class="num">±${(Number(r.banda)*100).toFixed(0)} p.p.</td>
+        </tr>`;
+      }).join("");
+    // ===== SERPROS (informativo, fora da estratégia) =====
+    document.getElementById("serpros").textContent = serprosSaldo
+      ? `SERPROS (informativo, fora da estratégia — como uma herança futura): ${fmt(serprosSaldo)}`
+      : "";
+  } catch (e) {
+    document.getElementById("status").innerHTML = `<span style="color:var(--vermelho)">Erro ao carregar: ${e.message}. Confira se rodou o 03_acesso_formulario.sql e se a URL/anon key estão corretas.</span>`;
+  }
+}
+carregar();
+</script>
+</body>
+</html>
