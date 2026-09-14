@@ -127,8 +127,8 @@
 </div>
 <p class="nota">Regras do método: COMPRA/VENDA sempre com quantidade + preço. USD exige câmbio do dia. Dividendo entra no caixa destino. Travados (COE/FMP) não rebalanceiam.</p>
 <script>
-const SUPABASE_URL = "https://SEU-PROJETO.supabase.co"; // TROCAR
-const ANON_KEY = "SUA_ANON_KEY"; // TROCAR (Settings -> API -> anon/publishable)
+const SUPABASE_URL = "https://qjubukhoryckpboqcqki.supabase.co"; // TROCAR
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqdWJ1a2hvcnlja3Bib3FjcWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTgxMTEsImV4cCI6MjEwNDc5NDExMX0.quVRHa8Bl2xanQ7LEJ6r_DxSHQWI2L8ReWyHl33YzoU"; // TROCAR (Settings -> API -> anon/publishable)
 let produtos = [], contas = [];
 async function init() {
   document.getElementById('data').value = new Date().toISOString().slice(0,10);
