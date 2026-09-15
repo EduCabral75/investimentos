@@ -73,7 +73,9 @@ async function enviar() {
   let ok = 0, erros = [];
   async function mandar(file, nome) {
     const fd = new FormData();
-    fd.append('arquivo', file, file.name);
+    // nome padronizado: o n8n classifica o arquivo por ele (b3/btg/avenue)
+    const nomesPadrao = { B3: 'b3-consolidado.xlsx', BTG: 'btg-extrato.xlsx', Avenue: 'avenue-statement.pdf' };
+    fd.append('arquivo', file, nomesPadrao[nome] || file.name);
     const r = await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'x-app-token': token }, body: fd });
     const texto = await r.text();
     if (r.ok && texto) {
