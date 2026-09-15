@@ -33,12 +33,17 @@
   <input type="file" id="arquivoB3" accept=".xlsx,.xls">
 </div>
 <div class="passo">
-  <h3>2. Statement Avenue (PDF)</h3>
+  <h3>2. Extrato BTG (xlsx)</h3>
+  <p>BTG → Conta Investimento → Extrato mensal (exportar xlsx). Cobre fundos DI, caixa e COE.</p>
+  <input type="file" id="arquivoBTG" accept=".xlsx,.xls">
+</div>
+<div class="passo">
+  <h3>3. Statement Avenue (PDF)</h3>
   <p>Avenue → Statements → PDF do mês fechado.</p>
   <input type="file" id="arquivoAvenue" accept=".pdf">
 </div>
 <div class="passo">
-  <h3>3. Poloniex</h3>
+  <h3>4. Poloniex</h3>
   <p>Automático — o workflow consulta via API no dia 1º de cada mês. Nada a fazer aqui.</p>
 </div>
 <label>Token de acesso</label>
@@ -59,10 +64,11 @@ async function enviar() {
   const msg = document.getElementById('msg');
   const token = document.getElementById('token').value.trim();
   const fB3 = document.getElementById('arquivoB3').files[0];
+  const fBTG = document.getElementById('arquivoBTG').files[0];
   const fAv = document.getElementById('arquivoAvenue').files[0];
   msg.className = ''; msg.style.display = 'none';
   if (!token) { msg.textContent = "⚠️ Informe o token"; msg.className = 'erro'; return; }
-  if (!fB3 && !fAv) { msg.textContent = "⚠️ Selecione pelo menos um arquivo"; msg.className = 'erro'; return; }
+  if (!fB3 && !fAv && !fBTG) { msg.textContent = "⚠️ Selecione pelo menos um arquivo"; msg.className = 'erro'; return; }
   btn.disabled = true; btn.textContent = "Enviando…";
   let ok = 0, erros = [];
   async function mandar(file, nome) {
@@ -81,6 +87,7 @@ async function enviar() {
   }
   try {
     if (fB3) await mandar(fB3, "B3");
+    if (fBTG) await mandar(fBTG, "BTG");
     if (fAv) await mandar(fAv, "Avenue");
     if (erros.length) {
       msg.textContent = "❌ " + erros.join(" | ");
