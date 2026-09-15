@@ -120,15 +120,17 @@ async function carregar() {
       pegar("rebalanceamento_mercado"), pegar("view_snapshot_atual"), pegar("serpros_info"),
       pegar("cambio"), pegar("evolucao_mensal")
     ]);
+    cambio.sort((a,b) => String(b.data).localeCompare(String(a.data)));
     document.getElementById("status").textContent = "Atualizado em " + new Date().toLocaleString("pt-BR") + " · fonte: seu Supabase";
     // ===== KPIs (dados do snapshot a mercado) =====
-    const total = reb.reduce((s,r) => s + Number(r.valor_atual_brl||0), 0);
-    const mercado = pos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
+    const total = pos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0); // posição COMPLETA (inclui caixas)
+    const mercado = total;
     const caixaBRL = pos.filter(p => p.produto_id === "CAIXA_BRL").reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
     const caixaUSD = pos.filter(p => p.produto_id === "CAIXA_USD").reduce((s,p) => s + Number(p.valor_mercado_moeda||0), 0);
     const serprosSaldo = serpros.length ? Number(serpros[serpros.length-1].saldo_brl) : 0;
     const foraBanda = reb.filter(r => Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0)).length;
-    const fx = cambio.length ? Number(cambio[0].usdbrl) : 5.0;
+    const cambioOrd = (cambio || []).sort((a,b) => b.data.localeCompare(a.data));
+    const fx = cambioOrd.length ? Number(cambioOrd[0].usdbrl) : 5.0;
     // ===== EVOLUÇÃO PATRIMONIAL =====
     const evo = (evolucao || []).sort((a,b) => a.data_ref.localeCompare(b.data_ref));
     const ultimo = evo.length ? Number(evo[evo.length-1].total_brl) : 0;
