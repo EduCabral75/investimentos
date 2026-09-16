@@ -21,11 +21,17 @@
   .tabela th { background:#f1f5f9; font-size:.75rem; text-transform:uppercase; color:var(--cinza); text-align:left; padding:10px 12px; }
   .tabela td { padding:10px 12px; font-size:.88rem; border-top:1px solid var(--borda); }
   .tabela td.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .badge { padding:3px 10px; border-radius:99px; font-size:.72rem; font-weight:700; }
+  .tabela tr.clicavel { cursor:pointer; }
+  .tabela tr.clicavel:hover { background:#f0f7ff; }
+  .tabela tr.sel { background:#e0e7ff; }
+  .badge { padding:3px 10px; border-radius:99px; font-size:.72rem; font-weight:700; white-space:nowrap; }
   .b-aportar { background:#dcfce7; color:#166534; }
   .b-acima { background:#fef3c7; color:#92400e; }
   .b-ok { background:#e0e7ff; color:#3730a3; }
   .b-fora { background:#fee2e2; color:#991b1b; }
+  .b-liq { background:#dcfce7; color:#166534; }
+  .b-vence { background:#fef3c7; color:#92400e; }
+  .b-trav { background:#fee2e2; color:#991b1b; }
   .graficos { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
   @media (max-width:800px){ .graficos{ grid-template-columns:1fr; } }
   .box-grafico { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:16px; }
@@ -36,6 +42,33 @@
   .plano .regra { font-size:.78rem; color:#1e40af; margin-top:10px; padding-top:8px; border-top:1px solid #bfdbfe; }
   .serpros { font-size:.8rem; color:var(--cinza); text-align:center; padding:10px; }
   #status { font-size:.8rem; color:var(--cinza); }
+  /* Drill-down */
+  #drilldown { display:none; margin-bottom:16px; }
+  #drilldown h3 { font-size:.95rem; margin-bottom:10px; }
+  #drilldown .fechar { float:right; cursor:pointer; color:var(--cinza); font-weight:700; }
+  /* Painel rota (C) */
+  .rota-linha { margin-bottom:12px; }
+  .rota-rotulo { display:flex; justify-content:space-between; font-size:.82rem; margin-bottom:4px; }
+  .rota-rotulo b { font-weight:600; }
+  .rota-barra { height:22px; background:#f1f5f9; border-radius:6px; position:relative; overflow:hidden; }
+  .rota-atual { height:100%; border-radius:6px; display:flex; align-items:center; }
+  .rota-alvo-marcador { position:absolute; top:-3px; width:3px; height:28px; background:#111827; border-radius:2px; }
+  .rota-legenda { font-size:.75rem; color:var(--cinza); margin-top:2px; }
+  /* Analisador de saida (E) */
+  .saida-card { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:14px; margin-bottom:10px; }
+  .saida-card h4 { font-size:.9rem; margin-bottom:6px; }
+  .saida-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; align-items:end; }
+  .saida-grid label { font-size:.7rem; color:var(--cinza); text-transform:uppercase; display:block; margin-bottom:3px; }
+  .saida-grid input { width:100%; padding:7px; border:1px solid var(--borda); border-radius:6px; font-size:.85rem; }
+  .saida-resultado { margin-top:8px; font-size:.85rem; padding:8px 10px; border-radius:8px; }
+  .saida-manter { background:#f0fdf4; color:#166534; }
+  .saida-sair { background:#fffbeb; color:#92400e; }
+  @media (max-width:700px){ .saida-grid { grid-template-columns:1fr 1fr; } }
+  nav.nav { margin-top:16px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  nav.nav a, nav.nav span { padding:8px 16px; border-radius:8px; font-size:.85rem; font-weight:600; text-decoration:none; }
+  nav.nav span { background:#f1f5f9; color:#6b7280; }
+  nav.nav a { background:#e0e7ff; color:#3730a3; }
+  nav.nav a.verde { background:#dcfce7; color:#166534; }
 </style>
 </head>
 <body>
@@ -44,20 +77,43 @@
 <p id="status">Carregando dados do Supabase…</p>
 <div class="grid" id="kpis"></div>
 <div class="plano" id="plano"></div>
+<!-- C: ONDE ESTOU → ONDE QUERO CHEGAR -->
+<div class="box-grafico" style="margin-bottom:16px;">
+  <h3>🎯 Onde estou → Onde quero chegar</h3>
+  <div id="rota"></div>
+  <div class="rota-legenda">Barra colorida = posição atual · linha preta ▮ = alvo · o número à direita mostra o que falta (verde) ou o que está acima (âmbar)</div>
+</div>
+<!-- A: 45/45/10 + distribuição -->
 <div class="graficos">
-  <div class="box-grafico"><h3>Alocação por classe (atual vs alvo)</h3><canvas id="gClasse"></canvas></div>
-  <div class="box-grafico"><h3>Distribuição por subclasse</h3><canvas id="gSub"></canvas></div>
+  <div class="box-grafico"><h3>45/45/10 — atual vs alvo (por classe macro)</h3><canvas id="g45"></canvas></div>
+  <div class="box-grafico"><h3>Distribuição por subclasse <span style="font-weight:400;font-size:.75rem;color:var(--cinza)">(clique numa fatia para ver os ativos)</span></h3><canvas id="gSub"></canvas></div>
 </div>
 <div class="box-grafico" style="margin-bottom:16px;"><h3>Evolução do patrimônio (snapshot a snapshot)</h3><canvas id="gEvolucao"></canvas></div>
+<!-- B: DRILL-DOWN -->
+<div class="box-grafico" id="drilldown">
+  <h3><span id="dd-titulo"></span><span class="fechar" onclick="fecharDD()">✕ fechar</span></h3>
+  <div id="dd-conteudo"></div>
+</div>
 <table class="tabela" id="tabelaReb">
-  <thead><tr><th>Subclasse</th><th>Classe</th><th class="num">Valor atual</th><th class="num">% atual</th><th class="num">% alvo</th><th class="num">Distância</th><th>Status</th><th>Banda</th></tr></thead>
+  <thead><tr><th>Subclasse</th><th>Classe</th><th class="num">Valor atual</th><th class="num">% atual</th><th class="num">% alvo</th><th class="num">Distância</th><th>Status</th><th>Banda</th><th>Liquidez</th></tr></thead>
   <tbody></tbody>
 </table>
+<!-- D: MAPA DE LIQUIDEZ -->
+<div class="box-grafico" style="margin-bottom:16px;">
+  <h3>💧 Mapa de liquidez — "até onde estou preso?"</h3>
+  <div id="mapaLiq"></div>
+</div>
+<!-- E: ANALISADOR DE CUSTO DE SAÍDA -->
+<div class="box-grafico" style="margin-bottom:16px;">
+  <h3>🚪 Analisador de custo de saída — vale a pena liquidar?</h3>
+  <p style="font-size:.8rem;color:var(--cinza);margin-bottom:10px;">Preencha o que souber (vencimento, % de perda se resgatar hoje). Os dados ficam salvos no seu navegador. O veredito compara <b>sair hoje</b> vs <b>manter até o fim</b> — é decisão sua, o número é só insumo.</p>
+  <div id="analisadorSaida"></div>
+</div>
 <div class="serpros" id="serpros"></div>
-<nav style="margin-top:16px; display:flex; gap:10px; justify-content:center;">
-  <span style="padding:8px 16px; background:#f1f5f9; color:#6b7280; border-radius:8px; font-size:.85rem; font-weight:600;">📊 Dashboard</span>
-  <a href="index.html" style="padding:8px 16px; background:#e0e7ff; color:#3730a3; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">💰 Transações</a>
-  <a href="importar.html" style="padding:8px 16px; background:#dcfce7; color:#166534; border-radius:8px; text-decoration:none; font-size:.85rem; font-weight:600;">📤 Importar snapshot</a>
+<nav class="nav">
+  <span>📊 Dashboard</span>
+  <a href="index.html">💰 Transações</a>
+  <a href="importar.html" class="verde">📤 Importar snapshot</a>
 </nav>
 <script>
 const SUPABASE_URL = "https://qjubukhoryckpboqcqki.supabase.co"; // TROCAR
@@ -78,42 +134,145 @@ function badge(status, foraDaBanda, direcao) {
   if (status === "ACIMA DO ALVO") return `<span class="badge b-acima">ACIMA · não aportar</span>`;
   return `<span class="badge b-ok">NO ALVO</span>`;
 }
+// ============ D: classificação de liquidez por produto ============
+function liquidezDoProduto(p) {
+  if (p.livre_travado === "Travado") return { tag: "TRAVADO", cls: "b-trav", ord: 2 };
+  const id = (p.produto_id || "").toUpperCase();
+  if (/^(CDB|DEB|CRA|COE)/.test(id)) return { tag: "VENCE ≤2028", cls: "b-vence", ord: 1 };
+  return { tag: "LÍQUIDO", cls: "b-liq", ord: 0 };
+}
 // ============ MÓDULO À PROVA DE MEDO ============
-function planoDeAcao(reb, serpros) {
-  const total = reb.reduce((s,r) => s + Number(r.valor_atual_brl||0), 0);
+function planoDeAcao(reb) {
   const abaixo = reb.filter(r => Number(r.distancia_brl) > 100).sort((a,b) => b.distancia_brl - a.distancia_brl);
   const acima = reb.filter(r => Number(r.distancia_brl) < -100);
   const foraBanda = reb.filter(r => Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0));
   const agora = new Date();
-  const mesDeAcao = [0,3,6,9].includes(agora.getMonth()); // jan/abr/jul/out = rebalanceamento trimestral
+  const mesDeAcao = [0,3,6,9].includes(agora.getMonth());
   const dia = agora.getDate();
   let html = `<h3>🧭 Plano de ação de hoje (${agora.toLocaleDateString("pt-BR")})</h3><ul>`;
-  // 1. Decisão única e objetiva
   if (abaixo.length) {
     const p = abaixo[0];
     html += `<li><b>APORTE DO MÊS (R$ ${APORTE_MENSAL}):</b> invista em <b>${p.subclasse}</b> — é a maior lacuna (falta ${fmt(p.distancia_brl)} para o alvo de ${pct(p.pct_alvo)}).</li>`;
   } else {
     html += `<li><b>APORTE DO MÊS:</b> todas as classes no alvo — deixe o aporte no <b>Caixa/DI</b> aguardando oportunidade.</li>`;
   }
-  // 2. Rebalanceamento trimestral, só quando toca
   if (mesDeAcao && dia <= 7) {
     if (foraBanda.length) {
       html += `<li><b>MÊS DE REBALANCEAMENTO:</b> ${foraBanda.map(r=>r.subclasse).join(", ")} estão fora da banda. Prioridade: use caixa excedente e aportes futuros; venda de ganhadores só se o caixa não resolver.</li>`;
     } else {
-      html += `<li><b>MÊS DE REBALANCEAMENTO:</b> tudo dentro das bandas — <b>não faça nada</b>. Método > impulso.</b></li>`;
+      html += `<li><b>MÊS DE REBALANCEAMENTO:</b> tudo dentro das bandas — <b>não faça nada</b>. Método > impulso.</li>`;
     }
   } else {
     const prox = [0,3,6,9].find(m => m > agora.getMonth());
     const nomeMes = ["janeiro","abril","julho","outubro"][prox !== undefined ? [0,3,6,9].indexOf(prox) : 0];
     html += `<li><b>Rebalanceamento:</b> não é mês de ação (próximo: ${nomeMes}). Se o medo bater, a resposta é <b>não fazer nada</b> — o plano já está no automático.</li>`;
   }
-  // 3. Alertas objetivos
   if (acima.length) html += `<li><b>Não coloque mais dinheiro em:</b> ${acima.map(r=>r.subclasse).join(", ")} (acima do alvo).</li>`;
   html += `<li><b>Travados (COE, FMP Eletrobras):</b> intocáveis até o vencimento — não são usados para rebalancear.</li>`;
-  // 4. Regra de ouro
   html += `</ul><div class="regra">🛡️ Regra do método: <b>o plano decide, não a emoção.</b> Fora do mês de rebalanceamento, sua única tarefa é o aporte mensal. Vender só por rebalanceamento, nunca por medo.</div>`;
   return html;
 }
+// ============ C: PAINEL ROTA ============
+function renderRota(reb) {
+  const el = document.getElementById("rota");
+  const cores = { "Defensivo":"#2563eb", "Crescimento":"#16a34a", "Assimetria":"#d97706" };
+  el.innerHTML = reb
+    .slice()
+    .sort((a,b) => a.classe_macro.localeCompare(b.classe_macro) || a.subclasse.localeCompare(b.subclasse))
+    .map(r => {
+      const atual = Math.min(Number(r.pct_atual||0), 1) * 100;
+      const alvoPos = Math.min(Number(r.pct_alvo||0), 1) * 100;
+      const dist = Number(r.distancia_brl||0);
+      const cor = cores[r.classe_macro] || "#6b7280";
+      const distTxt = dist > 100
+        ? `<span style="color:var(--verde);font-weight:700">+${fmt(dist)}</span>`
+        : (dist < -100 ? `<span style="color:var(--amarelo);font-weight:700">${fmt(dist)}</span>` : `<span style="color:var(--cinza)">no alvo</span>`);
+      return `<div class="rota-linha">
+        <div class="rota-rotulo"><b>${r.subclasse}</b><span>${pct(r.pct_atual)} → alvo ${pct(r.pct_alvo)} · ${distTxt}</span></div>
+        <div class="rota-barra">
+          <div class="rota-atual" style="width:${atual}%;background:${cor}"></div>
+          <div class="rota-alvo-marcador" style="left:calc(${alvoPos}% - 1px)"></div>
+        </div>
+      </div>`;
+    }).join("");
+}
+// ============ B: DRILL-DOWN ============
+let dadosSnapshot = [];
+function abrirDD(subclasse, taxonomiaId) {
+  const ativos = dadosSnapshot.filter(p => p.taxonomia_id === taxonomiaId)
+    .sort((a,b) => Number(b.valor_mercado_brl||0) - Number(a.valor_mercado_brl||0));
+  const total = ativos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
+  document.getElementById("dd-titulo").textContent = `📂 ${subclasse} — ${ativos.length} ativos · ${fmt(total)}`;
+  document.getElementById("dd-conteudo").innerHTML = `
+    <table class="tabela" style="margin-bottom:0">
+      <thead><tr><th>Ativo</th><th>Conta</th><th class="num">Valor</th><th class="num">% da subclasse</th><th>Liquidez</th></tr></thead>
+      <tbody>${ativos.map(p => {
+        const liq = liquidezDoProduto(p);
+        return `<tr>
+          <td><b>${p.produto_id}</b></td><td>${p.conta_id}</td>
+          <td class="num">${fmt(p.valor_mercado_brl)}</td>
+          <td class="num">${(Number(p.valor_mercado_brl||0)/total*100).toFixed(1).replace(".",",")}%</td>
+          <td><span class="badge ${liq.cls}">${liq.tag}</span></td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+  document.getElementById("drilldown").style.display = "block";
+  document.getElementById("drilldown").scrollIntoView({ behavior:"smooth", block:"nearest" });
+}
+function fecharDD() {
+  document.getElementById("drilldown").style.display = "none";
+  document.querySelectorAll("tr.sel").forEach(t => t.classList.remove("sel"));
+}
+// ============ E: ANALISADOR DE SAÍDA ============
+const SAIDA_KEY = "invest_saida_dados";
+function carregarSaida() { try { return JSON.parse(localStorage.getItem(SAIDA_KEY) || "{}"); } catch(e) { return {}; } }
+function salvarSaida(d) { localStorage.setItem(SAIDA_KEY, JSON.stringify(d)); }
+function renderAnalisador(pos) {
+  const alvos = pos.filter(p => {
+    const liq = liquidezDoProduto(p);
+    return liq.ord > 0 && Number(p.valor_mercado_brl) > 0;  // vencíveis e travados
+  }).sort((a,b) => Number(b.valor_mercado_brl) - Number(a.valor_mercado_brl));
+  const salvos = carregarSaida();
+  const el = document.getElementById("analisadorSaida");
+  if (!alvos.length) { el.innerHTML = "<p style='font-size:.85rem;color:var(--cinza)'>Nenhum ativo travado/vencível no snapshot.</p>"; return; }
+  el.innerHTML = alvos.map(p => {
+    const k = p.produto_id;
+    const s = salvos[k] || {};
+    const valor = Number(p.valor_mercado_brl||0);
+    const perdaPct = Number(s.perda || 0);      // % que perde se resgatar hoje
+    const taxaAnual = Number(s.taxa || 0);       // % a.a. que o ativo rende contratado
+    const anosRest = s.venc ? Math.max(0, (new Date(s.venc) - new Date()) / 365.25 / 86400000) : 0;
+    const perdaHoje = valor * perdaPct / 100;
+    // manter: valor futuro aproximado a taxa contratada; sair: valor - perda, reinvestido a 0 (conservador)
+    const valorManter = valor * Math.pow(1 + taxaAnual/100, anosRest);
+    const ganhoManter = valorManter - valor;
+    const veredito = (ganhoManter > perdaHoje)
+      ? `<div class="saida-resultado saida-manter">🟢 <b>Manter</b> costuma ganhar: render ~${fmt(ganhoManter)} até ${s.venc || "o vencimento"} vs perder ${fmt(perdaHoje)} saindo hoje. (Diferença: ${fmt(ganhoManter - perdaHoje)})</div>`
+      : `<div class="saida-resultado saida-sair">🟡 <b>Sair</b> pode compensar: perder ${fmt(perdaHoje)} hoje vs ganhar só ${fmt(ganhoManter)} até o vencimento. (Diferença: ${fmt(perdaHoje - ganhoManter)})</div>`;
+    return `<div class="saida-card">
+      <h4>${p.produto_id} <span style="font-weight:400;color:var(--cinza);font-size:.8rem">· ${fmt(valor)} · ${p.conta_id}</span></h4>
+      <div class="saida-grid">
+        <div><label>Vencimento</label><input type="date" data-prod="${k}" data-campo="venc" value="${s.venc || ""}"></div>
+        <div><label>Perda se resgatar hoje (%)</label><input type="number" step="0.1" data-prod="${k}" data-campo="perda" value="${s.perda ?? ""}" placeholder="ex.: 2.5"></div>
+        <div><label>Rende contratado (% a.a.)</label><input type="number" step="0.1" data-prod="${k}" data-campo="taxa" value="${s.taxa ?? ""}" placeholder="ex.: 10.5"></div>
+        <div><label>Anos restantes</label><input type="text" value="${anosRest ? anosRest.toFixed(1).replace(".",",") + " anos" : "—"}" disabled></div>
+      </div>
+      ${s.venc && s.perda !== undefined && s.taxa !== undefined && s.perda !== "" && s.taxa !== "" ? veredito : `<div class="saida-resultado" style="background:#f8fafc;color:var(--cinza)">Preencha vencimento, perda e taxa para ver o veredito.</div>`}
+    </div>`;
+  }).join("");
+  el.querySelectorAll("input[data-prod]").forEach(inp => {
+    inp.addEventListener("change", () => {
+      const d = carregarSaida();
+      const k = inp.dataset.prod, c = inp.dataset.campo;
+      d[k] = d[k] || {};
+      d[k][c] = inp.value;
+      salvarSaida(d);
+      renderAnalisador(pos);
+    });
+  });
+}
+// ============ CARREGAMENTO PRINCIPAL ============
+let gSubChart = null;
 async function carregar() {
   try {
     const [reb, pos, serpros, cambio, evolucao] = await Promise.all([
@@ -122,28 +281,29 @@ async function carregar() {
     ]);
     cambio.sort((a,b) => String(b.data).localeCompare(String(a.data)));
     document.getElementById("status").textContent = "Atualizado em " + new Date().toLocaleString("pt-BR") + " · fonte: seu Supabase";
-    // ===== KPIs (dados do snapshot a mercado) =====
-    const total = pos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0); // posição COMPLETA (inclui caixas)
-    const mercado = total;
+    // ===== KPIs =====
+    const total = pos.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
     const caixaBRL = pos.filter(p => p.produto_id === "CAIXA_BRL").reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
     const caixaUSD = pos.filter(p => p.produto_id === "CAIXA_USD").reduce((s,p) => s + Number(p.valor_mercado_moeda||0), 0);
     const serprosSaldo = serpros.length ? Number(serpros[serpros.length-1].saldo_brl) : 0;
     const foraBanda = reb.filter(r => Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0)).length;
-    const cambioOrd = (cambio || []).sort((a,b) => b.data.localeCompare(a.data));
-    const fx = cambioOrd.length ? Number(cambioOrd[0].usdbrl) : 5.0;
-    // ===== EVOLUÇÃO PATRIMONIAL =====
+    const fx = cambio.length ? Number(cambio[0].usdbrl) : 5.0;
+    // ===== EVOLUÇÃO =====
     const evo = (evolucao || []).sort((a,b) => a.data_ref.localeCompare(b.data_ref));
     const ultimo = evo.length ? Number(evo[evo.length-1].total_brl) : 0;
     const anterior = evo.length > 1 ? Number(evo[evo.length-2].total_brl) : null;
-    const varMes = anterior !== null ? ((ultimo - anterior) / anterior * 100) : null;
-    const varMesFmt = varMes === null ? "primeiro snapshot" : ((varMes >= 0 ? "▲ +" : "▼ ") + varMes.toFixed(2).replace(".",",") + "% vs mês anterior");
+    const diasEntre = anterior !== null && evo.length > 1
+      ? (new Date(evo[evo.length-1].data_ref) - new Date(evo[evo.length-2].data_ref)) / 86400000 : null;
+    const varMes = anterior !== null && diasEntre >= 20 ? ((ultimo - anterior) / anterior * 100) : null;
+    const varMesFmt = varMes === null ? "primeiro mês completo em out/2026"
+      : ((varMes >= 0 ? "▲ +" : "▼ ") + varMes.toFixed(2).replace(".",",") + "% vs snapshot anterior");
     document.getElementById("kpis").innerHTML = `
       <div class="card"><h3>Patrimônio investível (a mercado)</h3><div class="valor">${fmt(total)}</div><div class="detalhe">snapshot de ${pos.length ? pos[0].data_ref : "—"} · ${pos.length} posições</div></div>
       <div class="card"><h3>Caixa BRL</h3><div class="valor">${fmt(caixaBRL)}</div><div class="detalhe">reserva de oportunidade</div></div>
       <div class="card"><h3>Caixa USD</h3><div class="valor">US$ ${Number(caixaUSD).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div><div class="detalhe">câmbio ref.: ${fx}</div></div>
       <div class="card"><h3>Classes fora da banda</h3><div class="valor ${foraBanda ? "kpi-alerta" : "kpi-ok"}">${foraBanda}</div><div class="detalhe">${foraBanda ? "ver plano de ação" : "tudo dentro do plano"}</div></div>
       <div class="card"><h3>Evolução do patrimônio</h3><div class="valor ${varMes !== null && varMes < 0 ? "kpi-ruim" : "kpi-ok"}">${fmt(ultimo)}</div><div class="detalhe">${varMesFmt}</div></div>`;
-    // ===== GRÁFICO: EVOLUÇÃO MÊS A MÊS =====
+    // ===== GRÁFICO EVOLUÇÃO =====
     if (evo.length >= 1) {
       new Chart(document.getElementById("gEvolucao"), {
         type: "line",
@@ -154,9 +314,9 @@ async function carregar() {
         options: { plugins: { tooltip: { callbacks: { label: c => fmt(c.raw) } } }, scales: { y: { ticks: { callback: v => "R$ " + (v/1000).toFixed(0) + "k" } } } }
       });
     }
-    // ===== PLANO DE AÇÃO (à prova de medo) =====
+    // ===== PLANO DE AÇÃO =====
     document.getElementById("plano").innerHTML = planoDeAcao(reb);
-    // ===== GRÁFICO 1: classes atual vs alvo =====
+    // ===== A: GRÁFICO 45/45/10 (rosca dupla: atual por dentro, alvo por fora) =====
     const porClasse = {};
     reb.forEach(r => {
       porClasse[r.classe_macro] = porClasse[r.classe_macro] || { atual:0, alvo:0 };
@@ -164,28 +324,50 @@ async function carregar() {
       porClasse[r.classe_macro].alvo += Number(r.pct_alvo||0);
     });
     const classes = Object.keys(porClasse);
-    new Chart(document.getElementById("gClasse"), {
-      type: "bar",
-      data: { labels: classes, datasets: [
-        { label: "Atual (%)", data: classes.map(c => (porClasse[c].atual*100).toFixed(2)), backgroundColor: "#2563eb" },
-        { label: "Alvo (%)", data: classes.map(c => (porClasse[c].alvo*100).toFixed(2)), backgroundColor: "#93c5fd" }
-      ]},
-      options: { scales: { y: { ticks: { callback: v => v + "%" } } } }
-    });
-    // ===== GRÁFICO 2: pizza por subclasse =====
-    const subs = reb.filter(r => Number(r.valor_atual_brl) > 0);
-    new Chart(document.getElementById("gSub"), {
+    const coresClasse = { "Defensivo":"#2563eb", "Crescimento":"#16a34a", "Assimetria":"#d97706" };
+    new Chart(document.getElementById("g45"), {
       type: "doughnut",
-      data: { labels: subs.map(r => r.subclasse), datasets: [{ data: subs.map(r => Number(r.valor_atual_brl)) }] },
-      options: { plugins: { tooltip: { callbacks: { label: c => c.label + ": " + fmt(c.raw) } } } }
+      data: {
+        labels: [...classes.map(c => c + " (atual)"), ...classes.map(c => c + " (alvo)")],
+        datasets: [
+          { label: "Atual", data: classes.map(c => +(porClasse[c].atual*100).toFixed(2)),
+            backgroundColor: classes.map(c => coresClasse[c] || "#6b7280"), weight: 1 },
+          { label: "Alvo", data: classes.map(c => +(porClasse[c].alvo*100).toFixed(2)),
+            backgroundColor: classes.map(c => { const h = coresClasse[c] || "#6b7280"; return h + "55"; }), weight: 1 }
+        ]
+      },
+      options: {
+        cutout: "45%",
+        plugins: { tooltip: { callbacks: { label: c => c.label + ": " + c.raw.toFixed(1) + "%" } } },
+        /* legenda única embaixo */
+      }
     });
-    // ===== TABELA =====
+    // ===== GRÁFICO SUBCLASSE (clicável → drill-down) =====
+    const subs = reb.filter(r => Number(r.valor_atual_brl) > 0);
+    const coresSub = ["#2563eb","#16a34a","#d97706","#7c3aed","#db2777","#0891b2","#65a30d","#dc2626","#4f46e5"];
+    if (gSubChart) gSubChart.destroy();
+    gSubChart = new Chart(document.getElementById("gSub"), {
+      type: "doughnut",
+      data: { labels: subs.map(r => r.subclasse), datasets: [{ data: subs.map(r => Number(r.valor_atual_brl)), backgroundColor: subs.map((_,i) => coresSub[i % coresSub.length]) }] },
+      options: {
+        onClick: (evt, elems) => {
+          if (!elems.length) return;
+          const r = subs[elems[0].index];
+          abrirDD(r.subclasse, r.taxonomia_id);
+        }
+      }
+    });
+    // ===== C: ROTA =====
+    renderRota(reb);
+    // ===== TABELA (com drill-down ao clicar + badge liquidez) =====
+    const taxoPorSubclasse = {};
+    reb.forEach(r => taxoPorSubclasse[r.subclasse] = r.taxonomia_id);
     const tb = document.querySelector("#tabelaReb tbody");
     tb.innerHTML = reb
       .sort((a,b) => a.classe_macro.localeCompare(b.classe_macro) || a.subclasse.localeCompare(b.subclasse))
       .map(r => {
         const fora = Math.abs(Number(r.pct_atual||0) - Number(r.pct_alvo||0)) > Number(r.banda||0);
-        return `<tr>
+        return `<tr class="clicavel" onclick="abrirDD('${r.subclasse.replace(/'/g,"\\'")}','${r.taxonomia_id}')" title="Clique para ver os ativos">
           <td><b>${r.subclasse}</b></td><td>${r.classe_macro}</td>
           <td class="num">${fmt(r.valor_atual_brl)}</td>
           <td class="num">${pct(r.pct_atual)}</td>
@@ -193,9 +375,31 @@ async function carregar() {
           <td class="num" style="color:${Number(r.distancia_brl)>0?"var(--verde)":"var(--vermelho)"}">${Number(r.distancia_brl)>0?"+":""}${fmt(r.distancia_brl)}</td>
           <td>${badge(r.status, false, Number(r.distancia_brl)>0 ? "abaixo" : (Number(r.distancia_brl)<0 ? "acima" : null))}</td>
           <td class="num">±${(Number(r.banda)*100).toFixed(0)} p.p.</td>
+          <td></td>
         </tr>`;
       }).join("");
-    // ===== SERPROS (informativo, fora da estratégia) =====
+    // ===== D: MAPA DE LIQUIDEZ =====
+    dadosSnapshot = pos;
+    const grupos = { 0: { tag:"LÍQUIDO", cls:"b-liq", itens:[] }, 1: { tag:"VENCE ≤2028", cls:"b-vence", itens:[] }, 2: { tag:"TRAVADO", cls:"b-trav", itens:[] } };
+    pos.forEach(p => { const l = liquidezDoProduto(p); grupos[l.ord].itens.push(p); });
+    document.getElementById("mapaLiq").innerHTML = [2,1,0].map(o => {
+      const g = grupos[o];
+      const tot = g.itens.reduce((s,p) => s + Number(p.valor_mercado_brl||0), 0);
+      if (!g.itens.length) return "";
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span class="badge ${g.cls}">${g.tag} · ${g.itens.length} ativos</span>
+          <b style="font-size:.9rem">${fmt(tot)} <span style="color:var(--cinza);font-weight:400">(${(tot/total*100).toFixed(1).replace(".",",")}%)</span></b>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${g.itens.sort((a,b) => Number(b.valor_mercado_brl||0)-Number(a.valor_mercado_brl||0)).map(p =>
+            `<span style="background:#f8fafc;border:1px solid var(--borda);border-radius:6px;padding:3px 8px;font-size:.78rem"><b>${p.produto_id}</b> ${fmt(p.valor_mercado_brl)}</span>`).join("")}
+        </div>
+      </div>`;
+    }).join("");
+    // ===== E: ANALISADOR DE SAÍDA =====
+    renderAnalisador(pos);
+    // ===== SERPROS =====
     document.getElementById("serpros").textContent = serprosSaldo
       ? `SERPROS (informativo, fora da estratégia — como uma herança futura): ${fmt(serprosSaldo)}`
       : "";
