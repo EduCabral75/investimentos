@@ -36,6 +36,9 @@
   @media (max-width:800px){ .graficos{ grid-template-columns:1fr; } }
   .box-grafico { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:16px; }
   .box-grafico h3 { font-size:.85rem; margin-bottom:10px; }
+  .legenda45 { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:12px; font-size:.8rem; align-items:center; }
+  .legenda45 .leg-item { display:inline-flex; align-items:center; gap:5px; }
+  .legenda45 .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
   .plano { background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px; margin-bottom:16px; }
   .plano h3 { color:#1e40af; font-size:.9rem; margin-bottom:8px; }
   .plano li { margin:6px 0 6px 18px; font-size:.88rem; }
@@ -85,7 +88,7 @@
 </div>
 <!-- A: 45/45/10 + distribuição -->
 <div class="graficos">
-  <div class="box-grafico"><h3>45/45/10 — atual vs alvo (por classe macro)</h3><canvas id="g45"></canvas></div>
+  <div class="box-grafico"><h3>45/45/10 — atual vs alvo (por classe macro)</h3><canvas id="g45"></canvas><div class="legenda45" id="legenda45"></div></div>
   <div class="box-grafico"><h3>Distribuição por subclasse <span style="font-weight:400;font-size:.75rem;color:var(--cinza)">(clique numa fatia para ver os ativos)</span></h3><canvas id="gSub"></canvas></div>
 </div>
 <div class="box-grafico" style="margin-bottom:16px;"><h3>Evolução do patrimônio (snapshot a snapshot)</h3><canvas id="gEvolucao"></canvas></div>
@@ -325,7 +328,7 @@ async function carregar() {
     });
     const classes = Object.keys(porClasse);
     const coresClasse = { "Defensivo":"#2563eb", "Crescimento":"#16a34a", "Assimetria":"#d97706" };
-    new Chart(document.getElementById("g45"), {
+    const g45 = new Chart(document.getElementById("g45"), {
       type: "doughnut",
       data: {
         labels: [...classes.map(c => c + " (atual)"), ...classes.map(c => c + " (alvo)")],
@@ -338,10 +341,23 @@ async function carregar() {
       },
       options: {
         cutout: "45%",
-        plugins: { tooltip: { callbacks: { label: c => c.label + ": " + c.raw.toFixed(1) + "%" } } },
-        /* legenda única embaixo */
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            // dataset 0 = anel interno (atual), dataset 1 = anel externo (alvo)
+            title: items => (items[0].datasetIndex === 0 ? "Atual" : "Alvo") + " — " + items[0].label.replace(/ \((atual|alvo)\)$/, ""),
+            label: c => c.datasetIndex === 0
+              ? " Atual: " + c.raw.toFixed(1) + "%"
+              : " Alvo: " + c.raw.toFixed(1) + "%"
+          } }
+        }
       }
     });
+    // Legenda customizada: cor cheia = atual, cor clara = alvo
+    document.getElementById("legenda45").innerHTML = classes.map(c =>
+      `<span class="leg-item"><span class="sw" style="background:${coresClasse[c]}"></span>${c} atual</span>` +
+      `<span class="leg-item"><span class="sw" style="background:${coresClasse[c]}55"></span>${c} alvo</span>`
+    ).join("") + `<span class="leg-item" style="color:var(--cinza)">anel interno = atual · anel externo = alvo</span>`;
     // ===== GRÁFICO SUBCLASSE (clicável → drill-down) =====
     const subs = reb.filter(r => Number(r.valor_atual_brl) > 0);
     const coresSub = ["#2563eb","#16a34a","#d97706","#7c3aed","#db2777","#0891b2","#65a30d","#dc2626","#4f46e5"];
